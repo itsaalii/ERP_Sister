@@ -1,0 +1,66 @@
+{
+    "inventaris": {
+        "BRG001": {
+            "nama": "Laptop Asus ROG",
+            "harga": 80,
+            "stok": 5
+        },
+        "BRG002": {
+            "nama": "Mouse Wireless",
+            "harga": 50000000,
+            "stok": 80
+        },
+        "FTGYHUJIK": {
+            "nama": "fvgbhnj",
+            "harga": 5,
+            "stok": 29
+        },
+        "GSJAJ": {
+            "nama": "hzb",
+            "harga": 36,
+            "stok": 36
+        }
+    },
+    "transaksi": [
+        {
+            "id_transaksi": "TRX-A2EAEFF4",
+            "waktu": "2026-09-28 14:04:22",
+            "id_barang": "BRG001",
+            "nama_barang": "Laptop Asus ROG",
+            "qty": 5,
+            "total_harga": 75000000
+        },
+        {
+            "id_transaksi": "TRX-6A8129F7",
+            "waktu": "2026-09-28 14:04:43",
+            "id_barang": "BRG002",
+            "nama_barang": "Mouse Wireless",
+            "qty": 50,
+            "total_harga": 12500000
+        },
+        {
+            "id_transaksi": "TRX-37FD1D1D",
+            "waktu": "2026-10-05 13:22:41",
+            "id_barang": "BRG001",
+            "nama_barang": "Laptop Asus ROG",
+            "qty": 20,
+            "total_harga": 1600
+        },
+        {
+            "id_transaksi": "TRX-4F4AC89A",
+            "waktu": "2026-10-05 13:22:41",
+            "id_barang": "BRG001",
+            "nama_barang": "Laptop Asus ROG",
+            "qty": 20,
+            "total_harga": 1600
+        },
+        {
+            "id_transaksi": "TRX-2084E7EE",
+            "waktu": "2026-10-05 13:26:01",
+            "id_barang": "BRG001",
+            "nama_barang": "Laptop Asus ROG",
+            "qty": 20,
+            "total_harga": 1600
+        }
+    ]
+}

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sistem ERP Terdistribusi</title>
+  <meta name="description" content="Aplikasi web ERP: penjualan, gudang, laporan manajemen, dan layanan pelanggan melalui RPC, RMI, dan REST." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: {
+      colors: { cream: '#faf7f2', sand: '#efe7dc', line: '#e4d9cb', coffee: { 50:'#f6f0ea', 100:'#ebdfd2', 500:'#8b6446', 600:'#74503a', 700:'#5e4130', 800:'#46301f' } }
+    } } }
+  </script>
+  <style>
+    input:focus { outline: none; border-color: #8b6446; box-shadow: 0 0 0 2px #ebdfd2; }
+  </style>
+</head>
+<body class="bg-cream text-stone-800 min-h-screen">
+  <div class="flex flex-col md:flex-row min-h-screen">
+    <aside class="md:w-60 bg-white border-b md:border-b-0 md:border-r border-line shrink-0">
+      <div class="px-5 py-5 border-b border-line">
+        <h1 class="text-base font-semibold text-coffee-800">Sistem ERP</h1>
+        <p class="text-xs text-stone-500">Protokol Terdistribusi</p>
+      </div>
+      <nav id="tabs" class="p-3 flex md:flex-col gap-1 overflow-x-auto"></nav>
+      <div class="px-5 py-4 border-t border-line hidden md:block">
+        <p class="text-xs font-medium text-stone-500 mb-2">Status Server</p>
+        <div id="status" class="space-y-1.5 text-xs"></div>
+      </div>
+    </aside>
+
+    <div class="flex-1 p-5 md:p-8 grid xl:grid-cols-3 gap-6 content-start">
+      <section id="panel" class="xl:col-span-2 bg-white border border-line rounded-lg p-6"></section>
+      <aside class="bg-white border border-line rounded-lg p-6 self-start">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-coffee-800">Riwayat Permintaan</h2>
+          <button onclick="document.getElementById('log').innerHTML=''" class="text-xs text-coffee-600 hover:underline">Hapus</button>
+        </div>
+        <ul id="log" class="divide-y divide-line text-xs max-h-[28rem] overflow-auto"></ul>
+        <p id="logEmpty" class="text-xs text-stone-400">Belum ada permintaan.</p>
+      </aside>
+    </div>
+  </div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const rp = (n) => 'Rp ' + Number(n).toLocaleString('id-ID');
+// Heroicons (outline, 24x24)
+const P = {
+  cart: 'M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 0 0-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 0 0-16.536-1.84M7.5 14.25 5.106 5.272M6 20.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm12.75 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z',
+  box: 'm20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z',
+  chart: 'M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z',
+  search: 'm21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z',
+  warn: 'M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z',
+  ok: 'M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+  err: 'm9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+};
+const icon = (k, c = 'w-5 h-5') => `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="${c} shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="${P[k]}"/></svg>`;
+
+const tabs = [
+  { id: 'kasir', label: 'Penjualan', proto: 'TCP RPC', ic: 'cart' },
+  { id: 'gudang', label: 'Gudang', proto: 'RMI', ic: 'box' },
+  { id: 'manajer', label: 'Manajemen', proto: 'REST', ic: 'chart' },
+  { id: 'cs', label: 'Layanan Pelanggan', proto: 'TCP RPC', ic: 'search' },
+];
+let active = 'kasir';
+
+const api = async (url, body) => {
+  const r = await fetch(url, body ? { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) } : {});
+  return r.json();
+};
+function log(res, aksi) {
+  const m = res._meta || {}; const ok = res.status === 'success';
+  $('#logEmpty').style.display = 'none';
+  $('#log').insertAdjacentHTML('afterbegin', `<li class="py-2.5">
+    <div class="flex justify-between"><span class="font-medium text-coffee-700">${aksi}</span><span class="text-stone-400">${m.ms ?? '-'} ms</span></div>
+    <div class="text-stone-500">${m.protocol || '-'}</div>
+    <div class="${ok ? 'text-green-700' : 'text-red-700'}">${ok ? 'Berhasil' : (res.pesan || 'Gagal')}</div></li>`);
+}
+const field = (id, label, type = 'text', ph = '') => `<label class="block text-sm"><span class="text-stone-600">${label}</span>
+  <input id="${id}" type="${type}" placeholder="${ph}" class="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm placeholder-stone-400"/></label>`;
+const btn = (label, fn) => `<button onclick="${fn}" class="mt-4 px-4 py-2 rounded-md text-sm font-medium text-white bg-coffee-600 hover:bg-coffee-700 transition-colors">${label}</button>`;
+const title = (t, d, p) => `<div class="flex items-start justify-between mb-5 pb-4 border-b border-line"><div><h2 class="text-lg font-semibold text-coffee-800">${t}</h2><p class="text-sm text-stone-500">${d}</p></div><span class="px-2 py-0.5 rounded text-xs bg-coffee-50 text-coffee-700 border border-line">${p}</span></div>`;
+const alertBox = (ok, msg) => `<div class="mt-5 p-3.5 rounded-md text-sm flex gap-2.5 ${ok ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'}">${icon(ok ? 'ok' : 'err')}<div>${msg}</div></div>`;
+
+const views = {
+  kasir: () => title('Penjualan', 'Catat transaksi penjualan barang', 'TCP RPC') +
+    `<div class="grid sm:grid-cols-2 gap-4">${field('k_id', 'ID Barang', 'text', 'BRG001')}${field('k_qty', 'Jumlah', 'number', '1')}</div>${btn('Proses Transaksi', 'kasir()')}<div id="out"></div>`,
+  gudang: () => title('Gudang', 'Tambah stok atau daftarkan barang baru', 'RMI (XML-RPC)') +
+    `<div class="grid sm:grid-cols-2 gap-4">${field('g_id', 'ID Barang', 'text', 'BRG003')}${field('g_nama', 'Nama Barang', 'text', 'Keyboard')}${field('g_harga', 'Harga', 'number', '500000')}${field('g_stok', 'Stok Masuk', 'number', '10')}</div>${btn('Simpan', 'gudang()')}<div id="out"></div>`,
+  manajer: () => title('Manajemen', 'Laporan kinerja penjualan dan stok', 'REST') + `<div id="out"></div>`,
+  cs: () => title('Layanan Pelanggan', 'Cari ketersediaan barang', 'TCP RPC') +
+    `${field('c_q', 'Cari barang', 'search', 'Ketik nama atau ID barang').replace('<input ', '<input oninput="csLive()" autocomplete="off" ')}<div id="out"></div>`,
+};
+function render() {
+  $('#tabs').innerHTML = tabs.map(t => `<button onclick="active='${t.id}';render()" class="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-left whitespace-nowrap transition-colors ${t.id === active ? 'bg-coffee-50 text-coffee-800 font-medium' : 'text-stone-600 hover:bg-sand'}">${icon(t.ic, 'w-5 h-5')}<span>${t.label}<span class="block text-[11px] font-normal text-stone-400">${t.proto}</span></span></button>`).join('');
+  $('#panel').innerHTML = views[active]();
+  if (active === 'manajer') manajer();
+  if (active === 'cs') cs();
+}
+async function kasir() {
+  const res = await api('/api/transaksi', { id_barang: $('#k_id').value, qty: $('#k_qty').value });
+  log(res, 'Catat transaksi');
+  $('#out').innerHTML = res.status === 'success'
+    ? alertBox(true, `<div class="font-medium">Transaksi ${res.data.id_transaksi}</div>${res.data.nama_barang} x ${res.data.qty}<br>Total ${rp(res.data.total_harga)}<br><span class="text-xs opacity-70">${res.data.waktu}</span>`)
+    : alertBox(false, res.pesan);
+}
+async function gudang() {
+  const res = await api('/api/stok', { id_barang: $('#g_id').value, nama: $('#g_nama').value, harga: $('#g_harga').value, stok: $('#g_stok').value });
+  log(res, 'Tambah stok'); $('#out').innerHTML = alertBox(res.status === 'success', res.pesan);
+}
+async function manajer() {
+  const res = await api('/api/laporan'); log(res, 'Ambil laporan');
+  if (res.status !== 'success') return $('#out').innerHTML = alertBox(false, res.pesan);
+  const d = res.data;
+  const card = (l, v) => `<div class="rounded-md p-4 bg-cream border border-line"><div class="text-xs text-stone-500">${l}</div><div class="text-lg font-semibold text-coffee-800">${v}</div></div>`;
+  $('#out').innerHTML = `<div class="grid sm:grid-cols-3 gap-3">${card('Total Pendapatan', rp(d.total_pendapatan))}${card('Item Terjual', d.total_item_terjual + ' unit')}${card('Jumlah Transaksi', d.total_transaksi)}</div>
+    <h3 class="mt-6 mb-2 text-sm font-semibold text-coffee-800 flex items-center gap-1.5">${icon('warn', 'w-4 h-4')}Stok Kritis</h3>
+    <ul class="space-y-1 text-sm">${d.peringatan_stok.length ? d.peringatan_stok.map(s => `<li class="px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-amber-900">${s}</li>`).join('') : '<li class="text-stone-500">Semua stok aman.</li>'}</ul>
+    <h3 class="mt-6 mb-2 text-sm font-semibold text-coffee-800">Transaksi Terakhir</h3>
+    <div class="overflow-x-auto"><table class="w-full text-sm"><thead class="text-stone-500 text-left bg-cream"><tr><th class="py-2 px-2 font-medium">ID</th><th class="font-medium">Waktu</th><th class="font-medium">Barang</th><th class="font-medium">Qty</th><th class="text-right px-2 font-medium">Total</th></tr></thead><tbody>
+    ${d.riwayat_terakhir.slice().reverse().map(t => `<tr class="border-t border-line"><td class="py-2 px-2 font-mono text-xs">${t.id_transaksi}</td><td>${t.waktu}</td><td>${t.nama_barang}</td><td>${t.qty}</td><td class="text-right px-2">${rp(t.total_harga)}</td></tr>`).join('')}</tbody></table></div>
+    ${btn('Muat Ulang', 'manajer()')}`;
+}
+let csTimer, csSeq = 0;
+function csLive() { clearTimeout(csTimer); csTimer = setTimeout(cs, 250); }
+async function cs() {
+  const seq = ++csSeq, q = $('#c_q') ? $('#c_q').value : '';
+  const res = await api('/api/cari?q=' + encodeURIComponent(q));
+  if (seq !== csSeq || active !== 'cs') return; // abaikan respons usang
+  log(res, q ? 'Cari: ' + q : 'Tampilkan semua barang');
+  if (res.status !== 'success') return $('#out').innerHTML = alertBox(false, res.pesan);
+  $('#out').innerHTML = res.data.length ? `<div class="grid sm:grid-cols-2 gap-3 mt-5">${res.data.map(i => `<div class="rounded-md p-4 bg-cream border border-line">
+    <div class="text-xs font-mono text-coffee-600">${i.id}</div><div class="font-medium">${i.nama}</div>
+    <div class="text-sm text-stone-600 mt-1">${rp(i.harga)} &middot; <span class="${i.stok < 10 ? 'text-red-700' : 'text-green-700'}">Stok ${i.stok}</span></div></div>`).join('')}</div>` : alertBox(false, 'Barang tidak ditemukan.');
+}
+async function status() {
+  try {
+    const s = await api('/api/status');
+    $('#status').innerHTML = [['RPC :9090', s.rpc], ['RMI :8000', s.rmi], ['REST :5000', s.rest]].map(([n, ok]) =>
+      `<div class="flex items-center justify-between text-stone-600"><span>${n}</span><span class="${ok ? 'text-green-700' : 'text-red-700'}">${ok ? 'Aktif' : 'Mati'}</span></div>`).join('');
+  } catch (e) {}
+}
+document.addEventListener('keydown', e => { if (e.key === 'Enter') ({kasir, gudang}[active] || (() => {}))(); });
+render(); status(); setInterval(status, 4000);
+</script>
+</body>
+</html>
