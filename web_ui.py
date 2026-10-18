@@ -1,6 +1,7 @@
 """Gateway Web UI.
 Menyajikan antarmuka web (static/index.html) dan meneruskan aksi pengguna ke server_hybrid.py
-menggunakan protokol aslinya: TCP RPC (9090), XML-RPC/RMI (8000), dan REST (5000).
+menggunakan protokol aslinya: TCP RPC (9090), XML-RPC/RMI (8000), dan REST (5000),
+dengan dukungan sinkronisasi Lamport Logical Clock.
 Jalankan: python server_hybrid.py  (terminal 1)  lalu  python web_ui.py  (terminal 2) -> http://127.0.0.1:8080
 """
 import os, json, socket, pickle, time, urllib.request, xmlrpc.client
@@ -13,14 +14,15 @@ WEB_PORT = 8080
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
 
-def tcp_rpc(proc, params):
+def tcp_rpc(proc, params, client_clock=0):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(5)
     sock.connect((IP_SERVER, 9090))
     ch = Channel(sock)
     try:
-        ch.send_msg(pickle.dumps({"proc": proc, "params": params}))
-        return pickle.loads(ch.recv_msg())
+        ch.send_msg(pickle.dumps({"proc": proc, "params": params, "clock": client_clock}))
+        raw = ch.recv_msg()
+        return pickle.loads(raw) if raw else {"status": "error", "pesan": "Respons kosong dari RPC server"}
     finally:
         ch.close()
 
@@ -30,8 +32,10 @@ def rmi_call(method, *args):
     return getattr(proxy, method)(*args)
 
 
-def rest_get(path):
-    with urllib.request.urlopen(f"http://{IP_SERVER}:5000{path}", timeout=5) as r:
+def rest_get(path, client_clock=0):
+    url = f"http://{IP_SERVER}:5000{path}"
+    req = urllib.request.Request(url, headers={"X-Lamport-Clock": str(client_clock)})
+    with urllib.request.urlopen(req, timeout=5) as r:
         return json.loads(r.read().decode("utf-8"))
 
 
@@ -49,7 +53,11 @@ def timed(protocol, fn):
         res = fn()
     except Exception as e:
         res = {"status": "error", "pesan": f"Tidak dapat terhubung ke server ({protocol}): {e}"}
-    res["_meta"] = {"protocol": protocol, "ms": round((time.perf_counter() - t) * 1000, 1)}
+    res["_meta"] = {
+        "protocol": protocol,
+        "ms": round((time.perf_counter() - t) * 1000, 1),
+        "lamport_clock": res.get("lamport_clock", res.get("server_clock", "-"))
+    }
     return res
 
 
@@ -68,13 +76,27 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path)
         q = parse_qs(u.query)
+        client_clock = int(q.get("clock", [0])[0])
+
         if u.path == "/api/status":
-            return self._json({"rpc": port_open(9090), "rmi": port_open(8000), "rest": port_open(5000)})
+            srv_clock = 0
+            try:
+                c_res = rest_get("/api/clock")
+                srv_clock = c_res.get("server_clock", 0)
+            except Exception:
+                pass
+            return self._json({
+                "rpc": port_open(9090),
+                "rmi": port_open(8000),
+                "rest": port_open(5000),
+                "server_clock": srv_clock
+            })
         if u.path == "/api/cari":
             kw = q.get("q", [""])[0]
-            return self._json(timed("TCP RPC", lambda: tcp_rpc("cari_barang", (kw,))))
+            return self._json(timed("TCP RPC", lambda: tcp_rpc("cari_barang", (kw,), client_clock)))
         if u.path == "/api/laporan":
-            return self._json(timed("REST", lambda: rest_get("/api/laporan")))
+            return self._json(timed("REST", lambda: rest_get("/api/laporan", client_clock)))
+
         # static files
         name = "index.html" if u.path in ("/", "") else u.path.lstrip("/")
         fp = os.path.normpath(os.path.join(STATIC_DIR, name))
@@ -97,13 +119,16 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(n) or b"{}")
         except Exception:
             return self._json({"status": "error", "pesan": "Body JSON tidak valid"}, 400)
+        
         path = urlparse(self.path).path
+        client_clock = int(body.get("clock", 0))
+
         try:
             if path == "/api/transaksi":
                 idb, qty = str(body["id_barang"]).strip(), int(body["qty"])
-                return self._json(timed("TCP RPC", lambda: tcp_rpc("catat_transaksi", (idb, qty))))
+                return self._json(timed("TCP RPC", lambda: tcp_rpc("catat_transaksi", (idb, qty), client_clock)))
             if path == "/api/stok":
-                a = (str(body["id_barang"]).strip(), str(body["nama"]), int(body["harga"]), int(body["stok"]))
+                a = (str(body["id_barang"]).strip(), str(body["nama"]), int(body["harga"]), int(body["stok"]), client_clock)
                 return self._json(timed("RMI (XML-RPC)", lambda: rmi_call("tambah_stok", *a)))
         except (KeyError, ValueError) as e:
             return self._json({"status": "error", "pesan": f"Input tidak valid: {e}"}, 400)
@@ -116,3 +141,4 @@ if __name__ == "__main__":
         ThreadingHTTPServer(("0.0.0.0", WEB_PORT), Handler).serve_forever()
     except KeyboardInterrupt:
         print("\nWeb UI dimatikan.")
+
